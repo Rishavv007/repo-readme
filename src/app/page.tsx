@@ -602,4 +602,5 @@ Upload Folder
       />
     </div>
   </div>
-)}
+);
+}
