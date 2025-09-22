@@ -47,13 +47,13 @@ repo-readme/
 
 ## ⚡ Installation
 
-# Clone the repo
+### Clone the repo
 git clone https://github.com/Rishavv007/repo-readme.git
 
-# Move into project directory
+### Move into project directory
 cd repo-readme
 
-# Install dependencies
+### Install dependencies
 npm install
 
 
@@ -61,17 +61,16 @@ npm install
 
 ## ▶️ Usage
 
-# Run the project in development mode
+### Run the project in development mode
 npm run dev
 
-# Run tests
+### Run tests
 npm test
 
 ---
 
 ## 📸 Screenshots
 
-A screenshot of the application’s console showing the build process:
 <img width="1470" height="881" alt="Screenshot 2025-09-22 at 10 41 22 PM" src="https://github.com/user-attachments/assets/38063d89-4d04-469b-8044-341fad751c61" />
 
 
@@ -88,7 +87,7 @@ API\_KEY=your\_gemini\_api\_key
 
 ## 🧪 Testing
 
-# Run unit tests
+### Run unit tests
 npm test
 
 ---
