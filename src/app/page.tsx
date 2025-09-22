@@ -569,34 +569,37 @@ export default function Home() {
                 className="flex items-center justify-center w-full md:w-auto px-4 py-2 rounded-lg bg-blue-500 text-white cursor-pointer hover:bg-blue-600 transition-colors duration-200 shadow-md"
               >
                 <FolderUp size={20} className="mr-2" />
-                Upload Folder
-                <input
-                  id="file-upload"
-                  type="file"
-                  onChange={handleFileChange}
-                  // @ts-expect-error
-                  directory=""
-                  webkitdirectory=""
-                  hidden
-                />
-              </label>
-            </div>
+Upload Folder
+<input
+  id="file-upload"
+  type="file"
+  onChange={handleFileChange}
+  // @ts-expect-error
+  directory=""
+  webkitdirectory=""
+  hidden
+/>
+</label>
+</div>
 
-            <div className="flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-4 mt-6">
-              <button
-                onClick={() => handleGenerateReadme()}
-                disabled={loading || (!repoUrl && !isValidUrl)}
-                className="w-full md:w-auto px-6 py-3 rounded-lg bg-purple-500 text-white font-bold hover:bg-purple-600 transition-colors duration-200 shadow-md disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center justify-center"
-              >
-                {loading && <Loader2 className="animate-spin mr-2" size={20} />}
-                Generate README
-              </button>
-            </div>
+<div className="flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-4 mt-6">
+  <button
+    onClick={() => handleGenerateReadme()}
+    disabled={loading || (!repoUrl && !isValidUrl)}
+    className="w-full md:w-auto px-6 py-3 rounded-lg bg-purple-500 text-white font-bold hover:bg-purple-600 transition-colors duration-200 shadow-md disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center justify-center"
+  >
+    {loading && <Loader2 className="animate-spin mr-2" size={20} />}
+    Generate README
+  </button>
+</div>
 
-            {status.inProgress && (
-              <div className="mt-4 text-center">
-                <div className="w-full bg-gray-700 rounded-full h-2.5 mb-2">
-                  <div
-                    className="bg-blue-500 h-2.5 rounded-full transition-all duration-500"
-                    style={{ width: `${(status.step / 4) * 100}%` }}
-                 
+{status.inProgress && (
+  <div className="mt-4 text-center">
+    <div className="w-full bg-gray-700 rounded-full h-2.5 mb-2">
+      <div
+        className="bg-blue-500 h-2.5 rounded-full transition-all duration-500"
+        style={{ width: `${(status.step / 4) * 100}%` }}
+      />
+    </div>
+  </div>
+)}
