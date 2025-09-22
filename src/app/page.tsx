@@ -1,20 +1,32 @@
 "use client";
 
 import { useState } from 'react';
-// You will need to install lucide-react: npm install lucide-react
 import { Github, Loader2, FileText, Bot, FolderUp } from 'lucide-react';
+
+interface FileInfo {
+  name: string;
+  webkitRelativePath: string;
+}
+
+interface Analysis {
+  hasNode: boolean;
+  hasPython: boolean;
+  hasReact: boolean;
+  hasTypeScript: boolean;
+  hasNext: boolean;
+}
 
 // The main application component for the RepoReadme app.
 const Home = () => {
-  const [repoUrl, setRepoUrl] = useState('');
-  const [uploadedFiles, setUploadedFiles] = useState([]);
-  const [readmeContent, setReadmeContent] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [analysisStatus, setAnalysisStatus] = useState('');
+  const [repoUrl, setRepoUrl] = useState<string>('');
+  const [uploadedFiles, setUploadedFiles] = useState<FileInfo[]>([]);
+  const [readmeContent, setReadmeContent] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>('');
+  const [analysisStatus, setAnalysisStatus] = useState<string>('');
 
   // The hard-coded template for the README file. The AI will only fill in the placeholders.
-  const readmeTemplate = (projectName, description, features, structure, techStack, installCommand, runCommand, testCommand, issuesLink) => `
+  const readmeTemplate = (projectName: string, description: string, features: string, structure: string, techStack: string, installCommand: string, runCommand: string, testCommand: string, issuesLink: string): string => `
 # ${projectName}
 
 ${description}
@@ -145,8 +157,9 @@ Distributed under the MIT License. See LICENSE file for details.
   `.trim();
 
   // Modular function to get a specific piece of content from the LLM.
-  const getLLMGeneratedContent = async (prompt, label) => {
+  const getLLMGeneratedContent = async (prompt: string, label: string): Promise<string | null> => {
     setAnalysisStatus(label);
+    // Paste your API key here to fix the 403 error.
     const apiKey = "AIzaSyBdDaUjSJcSsb9iOUrOEAKrcjlL0-1tJTA";
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
 
@@ -157,8 +170,8 @@ Distributed under the MIT License. See LICENSE file for details.
     while (retryCount < maxRetries) {
       try {
         const payload = {
-            contents: [{ parts: [{ text: prompt }] }],
-            tools: [{ "google_search": {} }],
+          contents: [{ parts: [{ text: prompt }] }],
+          tools: [{ "google_search": {} }],
         };
 
         const response = await fetch(apiUrl, {
@@ -190,7 +203,7 @@ Distributed under the MIT License. See LICENSE file for details.
       } catch (err) {
         console.error("API call failed:", err);
         setError(`Failed to generate ${label.toLowerCase()}. Please try again.`);
-        return null; // Return null on final failure
+        return null;
       }
     }
     
@@ -200,7 +213,7 @@ Distributed under the MIT License. See LICENSE file for details.
   };
 
   // Analyze the uploaded files to provide a better prompt to the LLM.
-  const analyzeFiles = (files) => {
+  const analyzeFiles = (files: FileInfo[]): Analysis => {
     const analysis = {
       hasNode: files.some(file => file.name === 'package.json'),
       hasPython: files.some(file => file.name === 'requirements.txt' || file.name.endsWith('.py')),
@@ -212,7 +225,7 @@ Distributed under the MIT License. See LICENSE file for details.
   };
 
   // Fetch repository data from GitHub API.
-  const fetchGitHubRepoData = async (url) => {
+  const fetchGitHubRepoData = async (url: string) => {
     setAnalysisStatus('Fetching data from GitHub...');
     try {
       const urlParts = url.split('/').filter(part => part);
@@ -238,12 +251,12 @@ Distributed under the MIT License. See LICENSE file for details.
       }
 
       const repoData = await repoResponse.json();
-      const contentsData = await contentsResponse.json();
+      const contentsData: { path: string }[] = await contentsResponse.json();
       
       const filePaths = contentsData.map(item => item.path);
 
       // Perform analysis based on the files from the GitHub API
-      const analysis = analyzeFiles(filePaths.map(path => ({ name: path, webkitRelativePath: path })));
+      const analysis = analyzeFiles(filePaths.map(path => ({ name: path.split('/').pop() || '', webkitRelativePath: path })));
 
       return {
         repoName: repoData.name,
@@ -251,7 +264,7 @@ Distributed under the MIT License. See LICENSE file for details.
         filePaths: filePaths,
         analysis: analysis
       };
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
       setError(`Error fetching GitHub data: ${e.message}`);
       return null;
@@ -259,10 +272,15 @@ Distributed under the MIT License. See LICENSE file for details.
   };
 
   // Handle file selection from the directory input.
-  const handleFileChange = (e) => {
-    const files = Array.from(e.target.files);
-    setUploadedFiles(files);
-    setRepoUrl(''); // Clear the URL input when files is uploaded
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files).map(file => ({
+        name: file.name,
+        webkitRelativePath: file.webkitRelativePath,
+      }));
+      setUploadedFiles(files);
+      setRepoUrl('');
+    }
   };
 
   // This is the main function that handles the README generation process.
@@ -277,7 +295,7 @@ Distributed under the MIT License. See LICENSE file for details.
     setError('');
 
     try {
-      let repoName, analysis, installCommand, runCommand, testCommand, issuesLink, structure, description;
+      let repoName: string, analysis: Analysis, installCommand: string, runCommand: string, testCommand: string, issuesLink: string, structure: string, description: string;
 
       if (repoUrl) {
         const githubData = await fetchGitHubRepoData(repoUrl);
@@ -285,12 +303,12 @@ Distributed under the MIT License. See LICENSE file for details.
           setIsLoading(false);
           return;
         }
-        
+
         repoName = githubData.repoName;
         description = githubData.description;
         analysis = githubData.analysis;
         issuesLink = `${repoUrl}/issues`;
-        
+
         const fileTree = githubData.filePaths.map(file => `|── ${file}`).join('\n');
         structure = fileTree;
 
@@ -301,8 +319,8 @@ Distributed under the MIT License. See LICENSE file for details.
       } else {
         repoName = uploadedFiles[0].webkitRelativePath.split('/')[0] || 'my-project';
         analysis = analyzeFiles(uploadedFiles);
-        description = "This project automatically generates well-formatted README files."; // Placeholder for local upload
-        issuesLink = "https://github.com/username/project-name/issues"; // Placeholder for local
+        description = "This project automatically generates well-formatted README files.";
+        issuesLink = "https://github.com/username/project-name/issues";
         
         const fileTree = uploadedFiles.map(file => `|── ${file.webkitRelativePath}`).join('\n');
         structure = fileTree;
@@ -329,7 +347,7 @@ Distributed under the MIT License. See LICENSE file for details.
       const finalReadme = readmeTemplate(repoName, description, features, structure, techStack, installCommand, runCommand, testCommand, issuesLink);
       setReadmeContent(finalReadme);
       
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       setError('An unexpected error occurred. Please check the URL or folder and try again.');
     } finally {
