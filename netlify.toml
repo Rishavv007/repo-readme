@@ -1,0 +1,11 @@
+[build]command = "npm run build && next export"publish = "out"[[redirects]]from = "/*"to = "/index.html"status = 200eof
+
+### Step-by-Step Instructions
+
+1.  **Create the file**: In the root directory of your project (the same place where `package.json` and `next.config.ts` are located), create a new file named `netlify.toml`.
+2.  **Add the code**: Copy and paste the code block above into your new `netlify.toml` file and save it.
+3.  **Push to GitHub**: Open your terminal and run the following commands to commit and push this new file to GitHub.
+    ```bash
+    git add netlify.toml
+    git commit -m "Configure Netlify deployment"
+    git push
