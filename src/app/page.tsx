@@ -603,4 +603,6 @@ Upload Folder
     </div>
   </div>
 );
-}
+};
+
+export default MyComponent;
