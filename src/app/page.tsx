@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useMemo, useCallback } from 'react';
 import { Github, FolderUp, FileText, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 
