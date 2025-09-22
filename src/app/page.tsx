@@ -1,4 +1,4 @@
-"use client";
+ "use client";
 
 import { useState } from 'react';
 import { Github, Loader2, FileText, Bot, FolderUp } from 'lucide-react';
@@ -200,8 +200,12 @@ Distributed under the MIT License. See LICENSE file for details.
           throw new Error('No content generated from the API.');
         }
 
-      } catch (err) {
-        console.error("API call failed:", err);
+      } catch (err: unknown) {
+        let errorMessage = 'An unknown error occurred.';
+        if (err instanceof Error) {
+          errorMessage = err.message;
+        }
+        console.error("API call failed:", errorMessage);
         setError(`Failed to generate ${label.toLowerCase()}. Please try again.`);
         return null;
       }
@@ -264,9 +268,13 @@ Distributed under the MIT License. See LICENSE file for details.
         filePaths: filePaths,
         analysis: analysis
       };
-    } catch (e: any) {
+    } catch (e: unknown) {
+      let errorMessage = 'An unknown error occurred.';
+      if (e instanceof Error) {
+        errorMessage = e.message;
+      }
       console.error(e);
-      setError(`Error fetching GitHub data: ${e.message}`);
+      setError(`Error fetching GitHub data: ${errorMessage}`);
       return null;
     }
   };
@@ -347,7 +355,11 @@ Distributed under the MIT License. See LICENSE file for details.
       const finalReadme = readmeTemplate(repoName, description, features, structure, techStack, installCommand, runCommand, testCommand, issuesLink);
       setReadmeContent(finalReadme);
       
-    } catch (err: any) {
+    } catch (err: unknown) {
+      let errorMessage = 'An unexpected error occurred.';
+      if (err instanceof Error) {
+        errorMessage = err.message;
+      }
       console.error(err);
       setError('An unexpected error occurred. Please check the URL or folder and try again.');
     } finally {
