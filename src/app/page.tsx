@@ -1,33 +1,42 @@
- "use client";
-
-import { useState } from 'react';
-import { Github, Loader2, FileText, Bot, FolderUp } from 'lucide-react';
-
-interface FileInfo {
-  name: string;
-  webkitRelativePath: string;
-}
+import { useState, useMemo, useCallback } from 'react';
+import { Github, FolderUp, FileText, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 
 interface Analysis {
   hasNode: boolean;
   hasPython: boolean;
-  hasReact: boolean;
   hasTypeScript: boolean;
+  hasReact: boolean;
   hasNext: boolean;
+  hasDocker: boolean;
+  hasSQL: boolean;
+  hasNoCode: boolean;
 }
 
-// The main application component for the RepoReadme app.
-const Home = () => {
-  const [repoUrl, setRepoUrl] = useState<string>('');
-  const [uploadedFiles, setUploadedFiles] = useState<FileInfo[]>([]);
-  const [readmeContent, setReadmeContent] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string>('');
-  const [analysisStatus, setAnalysisStatus] = useState<string>('');
+interface FileData {
+  name: string;
+  path: string;
+  type: 'file' | 'dir';
+}
 
-  // The hard-coded template for the README file. The AI will only fill in the placeholders.
-  const readmeTemplate = (projectName: string, description: string, features: string, structure: string, techStack: string, installCommand: string, runCommand: string, testCommand: string, issuesLink: string): string => `
-# ${projectName}
+interface StatusState {
+  step: number;
+  message: string;
+  inProgress: boolean;
+  isError: boolean;
+}
+
+const readmeTemplate = (
+  projectName: string,
+  description: string,
+  features: string,
+  structure: string,
+  techStack: string,
+  installCommand: string,
+  runCommand: string,
+  testCommand: string,
+  issuesLink: string
+) =>
+  `# ${projectName}
 
 ${description}
 
@@ -39,9 +48,7 @@ ${features}
 ---
 
 ## Project Structure
-\`\`\`
 ${structure}
-\`\`\`
 
 ---
 
@@ -52,18 +59,14 @@ ${techStack}
 
 ## Installation
 
-# Clone the repo
 \`\`\`bash
-git clone [repository_url]
-\`\`\`
+# Clone the repo
+git clone ${issuesLink.replace('/issues', '.git')}
 
 # Move into project directory
-\`\`\`bash
 cd ${projectName}
-\`\`\`
 
 # Install dependencies
-\`\`\`bash
 ${installCommand}
 \`\`\`
 
@@ -71,21 +74,12 @@ ${installCommand}
 
 ## Usage
 
-# Run the project
 \`\`\`bash
+# Run the project
 ${runCommand}
-\`\`\`
 
 # Run tests
-\`\`\`bash
 ${testCommand}
-\`\`\`
-
-Example API request:
-
-\`\`\`
-GET /api/v1/users
-Host: localhost:3000
 \`\`\`
 
 ---
@@ -103,14 +97,9 @@ SECRET_KEY=your_secret
 
 ## Testing
 
+\`\`\`bash
 # Run unit tests
-\`\`\`bash
 ${testCommand}
-\`\`\`
-
-# Run integration tests
-\`\`\`bash
-${testCommand} --integration
 \`\`\`
 
 ---
@@ -154,324 +143,383 @@ Email: youremail@example.com
 
 ## License
 Distributed under the MIT License. See LICENSE file for details.
-  `.trim();
+`;
 
-  // Modular function to get a specific piece of content from the LLM.
-  const getLLMGeneratedContent = async (prompt: string, label: string): Promise<string | null> => {
-    setAnalysisStatus(label);
-    // Paste your API key here to fix the 403 error.
+export default function Home() {
+  const [repoUrl, setRepoUrl] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [readmeContent, setReadmeContent] = useState('');
+  const [status, setStatus] = useState<StatusState>({
+    step: 0,
+    message: '',
+    inProgress: false,
+    isError: false,
+  });
+
+  const isValidUrl = useMemo(() => {
+    try {
+      new URL(repoUrl);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [repoUrl]);
+
+  const handleFileChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    setLoading(true);
+    setStatus({ step: 1, message: 'Analyzing local files...', inProgress: true, isError: false });
+
+    const fileList: FileData[] = Array.from(files).map((file) => ({
+      name: file.name,
+      path: file.webkitRelativePath || file.name,
+      type: file.name.includes('.') ? 'file' : 'dir',
+    }));
+
+    try {
+      await handleGenerateReadme(fileList);
+    } catch (error) {
+      console.error(error);
+      setStatus({ step: 1, message: 'Error analyzing files. Please try again.', inProgress: false, isError: true });
+      setLoading(false);
+    }
+  }, []);
+
+  const getLLMGeneratedContent = async (prompt: string, statusMessage: string): Promise<string | null> => {
+    setStatus({
+      step: status.step + 1,
+      message: statusMessage,
+      inProgress: true,
+      isError: false,
+    });
+
+    // NOTE: This API key is a placeholder. You must get your own and set it here
     const apiKey = "AIzaSyBdDaUjSJcSsb9iOUrOEAKrcjlL0-1tJTA";
+    if (!apiKey) {
+      const errorMessage = "API key is missing. Please add your Gemini API key.";
+      console.error(errorMessage);
+      setStatus({ step: status.step, message: errorMessage, inProgress: false, isError: true });
+      throw new Error(errorMessage);
+    }
+
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
 
-    let retryCount = 0;
-    const maxRetries = 5;
-    let delay = 1000;
-
-    while (retryCount < maxRetries) {
-      try {
-        const payload = {
-          contents: [{ parts: [{ text: prompt }] }],
-          tools: [{ "google_search": {} }],
-        };
-
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) {
-          if (response.status === 429) {
-            console.warn(`Rate limit exceeded. Retrying in ${delay}ms...`);
-            await new Promise(res => setTimeout(res, delay));
-            delay *= 2;
-            retryCount++;
-            continue;
-          }
-          throw new Error(`API request failed with status: ${response.status}`);
-        }
-
-        const result = await response.json();
-        const generatedText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-        if (generatedText) {
-          return generatedText;
-        } else {
-          throw new Error('No content generated from the API.');
-        }
-
-      } catch (err: unknown) {
-        let errorMessage = 'An unknown error occurred.';
-        if (err instanceof Error) {
-          errorMessage = err.message;
-        }
-        console.error("API call failed:", errorMessage);
-        setError(`Failed to generate ${label.toLowerCase()}. Please try again.`);
-        return null;
-      }
-    }
-    
-    console.error("Max retries reached. API call failed.");
-    setError(`Failed to generate ${label.toLowerCase()} after multiple attempts.`);
-    return null;
-  };
-
-  // Analyze the uploaded files to provide a better prompt to the LLM.
-  const analyzeFiles = (files: FileInfo[]): Analysis => {
-    const analysis = {
-      hasNode: files.some(file => file.name === 'package.json'),
-      hasPython: files.some(file => file.name === 'requirements.txt' || file.name.endsWith('.py')),
-      hasReact: files.some(file => file.name.endsWith('.jsx') || file.name.endsWith('.tsx')),
-      hasTypeScript: files.some(file => file.name.endsWith('.ts') || file.name.endsWith('.tsx') || file.name === 'tsconfig.json'),
-      hasNext: files.some(file => file.webkitRelativePath.includes('next.config.js') || file.webkitRelativePath.includes('app/')),
+    const payload = {
+      contents: [{ parts: [{ text: prompt }] }],
+      tools: [{ "google_search": {} }],
+      systemInstruction: {
+        parts: [{ text: "You are a world-class documentation expert. Your task is to generate concise and accurate text that precisely matches the user's request, without adding any extra information or conversational text. Respond only with the requested content." }]
+      },
     };
-    return analysis;
-  };
 
-  // Fetch repository data from GitHub API.
-  const fetchGitHubRepoData = async (url: string) => {
-    setAnalysisStatus('Fetching data from GitHub...');
+    let response;
     try {
-      const urlParts = url.split('/').filter(part => part);
-      const repoName = urlParts.pop();
-      const ownerName = urlParts.pop();
-      if (!repoName || !ownerName) {
-        throw new Error('Invalid GitHub URL format.');
-      }
+      response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
 
-      const apiUrl = `https://api.github.com/repos/${ownerName}/${repoName}`;
-      const contentsUrl = `https://api.github.com/repos/${ownerName}/${repoName}/contents`;
-      
-      const [repoResponse, contentsResponse] = await Promise.all([
-        fetch(apiUrl),
-        fetch(contentsUrl)
-      ]);
-      
-      if (!repoResponse.ok) {
-        throw new Error(`Failed to fetch repository data. Status: ${repoResponse.status}`);
+      if (!response.ok) {
+        throw new Error(`API request failed with status: ${response.status}`);
       }
-      if (!contentsResponse.ok) {
-        throw new Error(`Failed to fetch repository contents. Status: ${contentsResponse.status}`);
-      }
-
-      const repoData = await repoResponse.json();
-      const contentsData: { path: string }[] = await contentsResponse.json();
-      
-      const filePaths = contentsData.map(item => item.path);
-
-      // Perform analysis based on the files from the GitHub API
-      const analysis = analyzeFiles(filePaths.map(path => ({ name: path.split('/').pop() || '', webkitRelativePath: path })));
-
-      return {
-        repoName: repoData.name,
-        description: repoData.description,
-        filePaths: filePaths,
-        analysis: analysis
-      };
-    } catch (e: unknown) {
-      let errorMessage = 'An unknown error occurred.';
-      if (e instanceof Error) {
-        errorMessage = e.message;
-      }
-      console.error(e);
-      setError(`Error fetching GitHub data: ${errorMessage}`);
+    } catch (error) {
+      console.error('API request failed:', error);
+      setStatus({ step: status.step, message: 'API request failed. Please check your API key.', inProgress: false, isError: true });
       return null;
     }
-  };
 
-  // Handle file selection from the directory input.
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const files = Array.from(e.target.files).map(file => ({
-        name: file.name,
-        webkitRelativePath: file.webkitRelativePath,
-      }));
-      setUploadedFiles(files);
-      setRepoUrl('');
-    }
-  };
+    const result = await response.json();
+    const generatedText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
 
-  // This is the main function that handles the README generation process.
-  const handleGenerateReadme = async () => {
-    if (!repoUrl && uploadedFiles.length === 0) {
-      setError('Please enter a GitHub repository URL or upload a folder.');
-      return;
+    if (!generatedText) {
+      setStatus({ step: status.step, message: 'No content generated by the AI.', inProgress: false, isError: true });
+      return null;
     }
 
-    setIsLoading(true);
-    setReadmeContent('');
-    setError('');
+    return generatedText;
+  };
 
-    try {
-      let repoName: string, analysis: Analysis, installCommand: string, runCommand: string, testCommand: string, issuesLink: string, structure: string, description: string;
+  const analyzeCodebase = useCallback((fileList: FileData[]): Analysis => {
+    const analysis: Analysis = {
+      hasNode: fileList.some(f => f.name === 'package.json'),
+      hasPython: fileList.some(f => f.name === 'requirements.txt' || f.name.endsWith('.py')),
+      hasTypeScript: fileList.some(f => f.name.endsWith('.ts') || f.name.endsWith('.tsx')),
+      hasReact: fileList.some(f => f.name.endsWith('.jsx') || f.name.endsWith('.tsx') || f.name.endsWith('.js') || f.name.includes('react')),
+      hasNext: fileList.some(f => f.name.startsWith('next.config.')),
+      hasDocker: fileList.some(f => f.name.startsWith('Dockerfile')),
+      hasSQL: fileList.some(f => f.name.endsWith('.sql')),
+      hasNoCode: fileList.length === 0,
+    };
+    return analysis;
+  }, []);
 
-      if (repoUrl) {
-        const githubData = await fetchGitHubRepoData(repoUrl);
-        if (!githubData) {
-          setIsLoading(false);
-          return;
+  const getTechStack = useCallback((analysis: Analysis): string => {
+    const techStackItems = [];
+    if (analysis.hasNext) techStackItems.push('- Next.js');
+    if (analysis.hasReact) techStackItems.push('- React');
+    if (analysis.hasTypeScript) techStackItems.push('- TypeScript');
+    if (analysis.hasNode) techStackItems.push('- Node.js');
+    if (analysis.hasPython) techStackItems.push('- Python');
+    if (analysis.hasDocker) techStackItems.push('- Docker');
+    if (analysis.hasSQL) techStackItems.push('- SQL Database');
+    return techStackItems.length > 0 ? techStackItems.join('\n') : '- Not specified';
+  }, []);
+
+  const getCommands = useCallback((analysis: Analysis): { install: string; run: string; test: string } => {
+    if (analysis.hasNode) {
+      return {
+        install: 'npm install',
+        run: 'npm start',
+        test: 'npm test',
+      };
+    }
+    if (analysis.hasPython) {
+      return {
+        install: 'pip install -r requirements.txt',
+        run: 'python app.py',
+        test: 'pytest',
+      };
+    }
+    return {
+      install: 'Follow project-specific instructions',
+      run: 'Follow project-specific instructions',
+      test: 'Follow project-specific instructions',
+    };
+  }, []);
+
+  const getProjectStructure = useCallback((fileList: FileData[]): string => {
+    const rootDir = fileList.length > 0 ? fileList[0].path.split('/')[0] : 'project-name';
+    let structure = `${rootDir}/\n`;
+    const paths = new Set<string>();
+
+    fileList.forEach(file => {
+      const parts = file.path.split('/');
+      let currentPath = '';
+      for (let i = 0; i < parts.length; i++) {
+        currentPath += parts[i] + '/';
+        paths.add(currentPath);
+      }
+    });
+
+    const sortedPaths = Array.from(paths).sort();
+
+    sortedPaths.forEach(path => {
+      const parts = path.split('/').filter(p => p !== '');
+      const depth = parts.length - 1;
+      const prefix = '│──' + '──'.repeat(depth);
+      const name = parts[parts.length - 1];
+      structure += `${prefix} ${name}/\n`;
+    });
+
+    return structure;
+  }, []);
+
+  const handleGenerateReadme = useCallback(
+    async (fileList?: FileData[]) => {
+      setLoading(true);
+      setReadmeContent('');
+      setStatus({ step: 1, message: 'Starting README generation...', inProgress: true, isError: false });
+
+      let analysis: Analysis = { hasNode: false, hasPython: false, hasTypeScript: false, hasReact: false, hasNext: false, hasDocker: false, hasSQL: false, hasNoCode: true };
+      let repoName = 'project-name';
+      let repoDescription = 'Short description of the project and its purpose.';
+      let issuesLink = 'https://github.com/username/project-name/issues';
+
+      // Step 2: Fetch data from GitHub if a URL is provided
+      if (repoUrl && isValidUrl) {
+        setStatus({ step: 2, message: 'Fetching GitHub repository data...', inProgress: true, isError: false });
+        const githubMatch = repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+        if (githubMatch) {
+          const owner = githubMatch[1];
+          repoName = githubMatch[2];
+          issuesLink = `https://github.com/${owner}/${repoName}/issues`;
+
+          try {
+            const repoData = await (await fetch(`https://api.github.com/repos/${owner}/${repoName}`)).json();
+            if (repoData.description) {
+              repoDescription = repoData.description;
+            }
+
+            const filesData = await (await fetch(`https://api.github.com/repos/${owner}/${repoName}/git/trees/main?recursive=1`)).json();
+            const githubFiles: FileData[] = filesData.tree.map((f: any) => ({ name: f.path.split('/').pop(), path: f.path, type: f.type }));
+            analysis = analyzeCodebase(githubFiles);
+          } catch (error) {
+            setStatus({ step: 2, message: 'Could not fetch data from GitHub. Using placeholders.', inProgress: false, isError: true });
+            console.error('GitHub fetch failed:', error);
+          }
+        }
+      } else if (fileList && fileList.length > 0) {
+        analysis = analyzeCodebase(fileList);
+        repoName = fileList[0].name.split('/')[0];
+        setStatus({ step: 2, message: 'Local files analyzed.', inProgress: true, isError: false });
+      }
+
+      const inferredTechStack = getTechStack(analysis);
+      const { install: installCommand, run: runCommand, test: testCommand } = getCommands(analysis);
+
+      // Step 3: Generate the dynamic content using separate, focused LLM calls
+      try {
+        const features = await getLLMGeneratedContent(
+          `Generate a brief, Markdown-formatted list of 3 key features for a project with the name "${repoName}" and inferred tech stack: ${Object.keys(analysis).filter((key) => analysis[key as keyof Analysis]).join(', ')}. Format as a Markdown list.`,
+          'Generating features...'
+        );
+        if (!features) return;
+
+        const description = await getLLMGeneratedContent(
+          `Generate a short, concise project description for a project titled "${repoName}" with the following tech stack: ${inferredTechStack.replace(/-/g, '').replace(/\n/g, ', ')}.`,
+          'Generating project description...'
+        );
+        if (!description) return;
+
+        let structure = 'project-name/\n│── ...';
+        if (fileList) {
+          structure = getProjectStructure(fileList);
         }
 
-        repoName = githubData.repoName;
-        description = githubData.description;
-        analysis = githubData.analysis;
-        issuesLink = `${repoUrl}/issues`;
+        const fullReadme = readmeTemplate(
+          repoName,
+          description,
+          features,
+          structure,
+          inferredTechStack,
+          installCommand,
+          runCommand,
+          testCommand,
+          issuesLink
+        );
 
-        const fileTree = githubData.filePaths.map(file => `|── ${file}`).join('\n');
-        structure = fileTree;
-
-        installCommand = analysis.hasPython ? 'pip install -r requirements.txt' : 'npm install';
-        runCommand = analysis.hasPython ? 'python main.py' : 'npm start';
-        testCommand = analysis.hasPython ? 'pytest' : 'npm test';
-
-      } else {
-        repoName = uploadedFiles[0].webkitRelativePath.split('/')[0] || 'my-project';
-        analysis = analyzeFiles(uploadedFiles);
-        description = "This project automatically generates well-formatted README files.";
-        issuesLink = "https://github.com/username/project-name/issues";
-        
-        const fileTree = uploadedFiles.map(file => `|── ${file.webkitRelativePath}`).join('\n');
-        structure = fileTree;
-        
-        installCommand = analysis.hasPython ? 'pip install -r requirements.txt' : 'npm install';
-        runCommand = analysis.hasPython ? 'python main.py' : 'npm start';
-        testCommand = analysis.hasPython ? 'pytest' : 'npm test';
+        setReadmeContent(fullReadme);
+        setStatus({ step: 4, message: 'README generated!', inProgress: false, isError: false });
+      } catch (error) {
+        console.error('LLM generation failed:', error);
+        setStatus({ step: status.step, message: 'LLM generation failed. Check API key and try again.', inProgress: false, isError: true });
+      } finally {
+        setLoading(false);
       }
+    },
+    [repoUrl, isValidUrl, analyzeCodebase, getTechStack, getCommands, getProjectStructure]
+  );
 
-      // Generate the dynamic content using separate, focused LLM calls
-      const features = await getLLMGeneratedContent(
-        `Generate a brief, Markdown-formatted list of 3 key features for a project with the name "${repoName}" and inferred tech stack: ${Object.keys(analysis).filter(key => analysis[key]).join(', ')}. Format as a Markdown list.`,
-        'Generating features...'
-      );
-      if (!features) return;
-
-      const techStack = await getLLMGeneratedContent(
-        `Generate a brief, Markdown-formatted list of 3-5 key technologies for a project named "${repoName}" with the following file analysis: ${JSON.stringify(analysis)}. Format as a Markdown list.`,
-        'Generating tech stack...'
-      );
-      if (!techStack) return;
-
-      // Assemble the final README from the template and generated content
-      const finalReadme = readmeTemplate(repoName, description, features, structure, techStack, installCommand, runCommand, testCommand, issuesLink);
-      setReadmeContent(finalReadme);
-      
-    } catch (err: unknown) {
-      let errorMessage = 'An unexpected error occurred.';
-      if (err instanceof Error) {
-        errorMessage = err.message;
-      }
-      console.error(err);
-      setError('An unexpected error occurred. Please check the URL or folder and try again.');
-    } finally {
-      setIsLoading(false);
-      setAnalysisStatus('');
-    }
-  };
-
-  // The main UI of the application.
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gray-100 dark:bg-gray-900">
-      <div className="w-full max-w-2xl bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 space-y-8">
-        <div className="flex flex-col items-center space-y-2">
-          <Github className="w-12 h-12 text-gray-700 dark:text-gray-300" />
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 dark:text-white text-center">
-            RepoReadme Generator
-          </h1>
-          <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400 text-center max-w-md">
-            Instantly generate a professional README.md for your GitHub repository or local project.
-          </p>
-        </div>
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center p-4">
+      <main className="w-full max-w-4xl flex flex-col md:flex-row gap-8 mt-10">
+        <div className="flex-1 space-y-6">
+          <header className="text-center">
+            <h1 className="text-5xl font-extrabold text-blue-400">
+              <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
+                README.md
+              </span>{' '}
+              Generator
+            </h1>
+            <p className="mt-2 text-gray-400">
+              Auto-generate a professional README for your GitHub repo or local folder.
+            </p>
+          </header>
 
-        <div className="space-y-4">
-          <div className="relative">
-            <input
-              type="text"
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-sm placeholder-gray-400 dark:placeholder-gray-500 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter GitHub repository URL (e.g., https://github.com/user/repo)"
-              value={repoUrl}
-              onChange={(e) => {
-                setRepoUrl(e.target.value);
-                setUploadedFiles([]); // Clear files when URL is typed
-              }}
-              disabled={uploadedFiles.length > 0}
-            />
-            <Github className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
-          </div>
-
-          <div className="flex items-center justify-center text-gray-400 dark:text-gray-500">
-            <span className="bg-gray-200 dark:bg-gray-700 h-px flex-grow rounded-full"></span>
-            <span className="px-4 text-sm">OR</span>
-            <span className="bg-gray-200 dark:bg-gray-700 h-px flex-grow rounded-full"></span>
-          </div>
-
-          <div className="relative flex items-center justify-center">
-            <label htmlFor="folder-upload" className={`w-full flex items-center justify-center space-x-2 px-4 py-3 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-lg text-gray-700 dark:text-gray-200 font-medium transition-colors cursor-pointer ${repoUrl ? 'opacity-50 cursor-not-allowed' : ''}`}>
-              <FolderUp className="w-5 h-5" />
-              <span>Select Code Folder</span>
-              <input 
-                id="folder-upload" 
-                type="file" 
-                className="hidden" 
-                webkitdirectory="" 
-                directory="" 
-                onChange={handleFileChange}
-                disabled={!!repoUrl}
-              />
-            </label>
-          </div>
-          
-          {uploadedFiles.length > 0 && (
-            <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg border border-gray-200 dark:border-gray-600">
-              <h3 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">
-                Files Selected:
-              </h3>
-              <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300 max-h-40 overflow-y-auto">
-                {uploadedFiles.map((file, index) => (
-                  <li key={index}>{file.webkitRelativePath}</li>
-                ))}
-              </ul>
+          <div className="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
+            <h2 className="text-xl font-bold mb-4 text-blue-300">Start Generating</h2>
+            
+            <div className="flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-4">
+              <div className="relative flex-grow w-full">
+                <input
+                  type="url"
+                  placeholder="Enter GitHub URL (e.g., https://github.com/vercel/next.js)"
+                  value={repoUrl}
+                  onChange={(e) => setRepoUrl(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 rounded-lg bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <Github className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              </div>
+              <span className="text-gray-400 font-semibold">OR</span>
+              <label htmlFor="file-upload" className="flex items-center justify-center w-full md:w-auto px-4 py-2 rounded-lg bg-blue-500 text-white cursor-pointer hover:bg-blue-600 transition-colors duration-200 shadow-md">
+                <FolderUp size={20} className="mr-2" />
+                Upload Folder
+                <input
+                  id="file-upload"
+                  type="file"
+                  onChange={handleFileChange}
+                  // @ts-ignore
+                  directory=""
+                  webkitdirectory=""
+                  hidden
+                />
+              </label>
             </div>
-          )}
 
-          <button
-            onClick={handleGenerateReadme}
-            disabled={isLoading || (!repoUrl && uploadedFiles.length === 0)}
-            className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed rounded-lg text-white font-medium transition-colors"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="animate-spin w-5 h-5" />
-                <span>{analysisStatus}</span>
-              </>
-            ) : (
-              <>
-                <Bot className="w-5 h-5" />
-                <span>Generate README</span>
-              </>
+            <div className="flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-4 mt-6">
+              <button
+                onClick={() => handleGenerateReadme()}
+                disabled={loading || (!repoUrl && !isValidUrl)}
+                className="w-full md:w-auto px-6 py-3 rounded-lg bg-purple-500 text-white font-bold hover:bg-purple-600 transition-colors duration-200 shadow-md disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center justify-center"
+              >
+                {loading && (
+                  <Loader2 className="animate-spin mr-2" size={20} />
+                )}
+                Generate README
+              </button>
+            </div>
+
+            {status.inProgress && (
+              <div className="mt-4 text-center">
+                <div className="w-full bg-gray-700 rounded-full h-2.5 mb-2">
+                  <div
+                    className="bg-blue-500 h-2.5 rounded-full transition-all duration-500"
+                    style={{ width: `${(status.step / 4) * 100}%` }}
+                  ></div>
+                </div>
+                <p className="text-sm text-gray-400 flex items-center justify-center">
+                  <Loader2 size={16} className="animate-spin mr-2" />
+                  {status.message}
+                </p>
+              </div>
             )}
-          </button>
+            {!status.inProgress && status.isError && (
+              <div className="mt-4 text-center text-red-400 flex items-center justify-center">
+                <XCircle size={16} className="mr-2" />
+                <p>{status.message}</p>
+              </div>
+            )}
+            {!status.inProgress && !status.isError && status.step > 0 && (
+              <div className="mt-4 text-center text-green-400 flex items-center justify-center">
+                <CheckCircle size={16} className="mr-2" />
+                <p>README successfully generated!</p>
+              </div>
+            )}
+          </div>
         </div>
 
-        {error && (
-          <div className="p-4 bg-red-100 dark:bg-red-900 border border-red-300 dark:border-red-700 rounded-lg text-sm text-red-700 dark:text-red-300">
-            {error}
-          </div>
-        )}
-
-        {readmeContent && (
-          <div className="space-y-4">
-            <h2 className="text-2xl font-semibold text-gray-800 dark:text-white flex items-center space-x-2">
-              <FileText className="w-6 h-6" />
-              <span>Generated README.md</span>
+        <div className="flex-1 bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 overflow-hidden">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-blue-300 flex items-center">
+              <FileText size={20} className="mr-2" />
+              README.md
             </h2>
-            <pre className="p-4 overflow-x-auto whitespace-pre-wrap bg-gray-50 dark:bg-gray-900 rounded-lg text-sm font-mono text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700">
-              {readmeContent}
-            </pre>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(readmeContent);
+                alert('README content copied to clipboard!');
+              }}
+              className="px-4 py-2 rounded-lg bg-gray-700 text-gray-300 text-sm hover:bg-gray-600 transition-colors duration-200"
+            >
+              Copy to Clipboard
+            </button>
           </div>
-        )}
-      </div>
+          <textarea
+            readOnly
+            value={readmeContent}
+            placeholder="Your professional README will appear here."
+            className="w-full h-96 bg-gray-700 text-white p-4 rounded-lg resize-none font-mono focus:outline-none"
+          />
+        </div>
+      </main>
+      <footer className="w-full text-center mt-8 text-gray-500">
+        <p>&copy; 2024 Repo-Readme. All rights reserved.</p>
+      </footer>
     </div>
   );
-};
-
-export default Home;
+}
