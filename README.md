@@ -48,15 +48,12 @@ repo-readme/
 ## ⚡ Installation
 
 ### Clone the repo
-```bash ```
 ``` git clone https://github.com/Rishavv007/repo-readme.git ```
 
 ### Move into project directory
-```bash```
 ```cd repo-readme```
 
 ### Install dependencies
-```bash```
 ```npm install```
 
 
@@ -65,11 +62,9 @@ repo-readme/
 ## ▶️ Usage
 
 ### Run the project in development mode
-```bash``` 
 ```npm run dev```
 
 ### Run tests
-```bash```
 ```npm test```
 
 ---
