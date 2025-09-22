@@ -48,13 +48,16 @@ repo-readme/
 ## ⚡ Installation
 
 ### Clone the repo
-git clone https://github.com/Rishavv007/repo-readme.git
+```bash ```
+``` git clone https://github.com/Rishavv007/repo-readme.git ```
 
 ### Move into project directory
-cd repo-readme
+```bash```
+```cd repo-readme```
 
 ### Install dependencies
-npm install
+```bash```
+```npm install```
 
 
 ---
@@ -62,10 +65,12 @@ npm install
 ## ▶️ Usage
 
 ### Run the project in development mode
-npm run dev
+```bash``` 
+```npm run dev```
 
 ### Run tests
-npm test
+```bash```
+```npm test```
 
 ---
 
@@ -88,7 +93,8 @@ API\_KEY=your\_gemini\_api\_key
 ## 🧪 Testing
 
 ### Run unit tests
-npm test
+```bash```
+```npm test```
 
 ---
 
